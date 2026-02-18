@@ -291,6 +291,34 @@ python examples/example_usage.py
 
 - Schroeders, U., Wilhelm, O., & Olaru, G. (2016). Meta-heuristics in short scale construction: Ant colony optimization and genetic algorithm. *PLOS ONE*, *11*(11), e0167110.
 
+## Roadmap
+
+Looking to contribute? Here's what's on our to-do list:
+
+### Documentation
+- [ ] ReadTheDocs/Sphinx site — API docs auto-generated from docstrings, a tutorial, and algorithm explanation pages
+- [ ] Add a `CONTRIBUTING.md` — contribution workflow, dev setup, code style expectations, how to run tests
+- [ ] Jupyter notebook tutorials — walkthrough examples with real (or realistic) scale data showing end-to-end usage
+
+### Testing
+- [ ] Expand test coverage — only 6 tests right now. Good targets: edge cases (single dimension, 1 item per dim, all identical items), each optimizer individually, `print_comparison` output, and metrics correctness
+- [ ] Mock the sentence-transformer model in tests so they run fast without downloading weights — right now every test hits the network
+- [ ] Add a test for reproducibility — same seed should give same results
+
+### Benchmarking & Validation
+- [ ] Build a benchmark suite — compare optimizers on known scales (speed, solution quality, convergence) and produce a table/chart for the docs
+- [ ] Validate against published results — replicate the Schroeders et al. (2016) findings or similar published scale reductions to show SIREN produces comparable output
+
+### Features
+- [ ] CLI interface — `siren reduce --items items.csv --dims dims.csv --per-dim 3` using `click` or `argparse`
+- [ ] Results export — save results to CSV/JSON, not just print to console
+- [ ] Visualization — heatmap of the similarity matrix, before/after comparison plots using matplotlib
+- [ ] Cross-validation / stability analysis — run reduction multiple times with different seeds and report how stable the item selection is
+
+### Code Quality
+- [ ] Add `py.typed` + full type annotations — get `mypy --strict` passing
+- [ ] Replace `print()` calls with proper logging — the optimizers currently use `print` for progress; should use `logging` or a callback pattern so users can plug in `tqdm`, logging, or silence it cleanly
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
