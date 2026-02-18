@@ -28,7 +28,7 @@ jobs:
 
       - name: Lint with flake8
         run: |
-          flake8 src/siren --max-line-length=100 --count --show-source --statistics
+          flake8 src/siren --max-line-length=100 --extend-ignore=E128 --count --show-source --statistics
 
       - name: Run tests
         run: |

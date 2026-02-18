@@ -348,7 +348,9 @@ class SIREN:
         optimizer_name = self.optimizer.__class__.__name__.replace("Optimizer", "").upper()
         print(f"SCALE COMPARISON: ORIGINAL vs SHORTENED ({optimizer_name} OPTIMIZED)")
         print("="*120)
-        print(f"\n{'ORIGINAL SCALE':<{max_len_original}} | {'SHORTENED SCALE':<{max_len_shortened}}")
+        orig_header = f"{'ORIGINAL SCALE':<{max_len_original}}"
+        short_header = f"{'SHORTENED SCALE':<{max_len_shortened}}"
+        print(f"\n{orig_header} | {short_header}")
         print("-"*120)
 
         # Process each dimension
@@ -358,7 +360,9 @@ class SIREN:
             shortened_items = result[dim]['items']
 
             print(f"\n{'='*40} DIMENSION {dim} {'='*40}")
-            print(f"Original: {len(original_items)} items | Shortened: {len(shortened_items)} items")
+            n_orig = len(original_items)
+            n_short = len(shortened_items)
+            print(f"Original: {n_orig} items | Shortened: {n_short} items")
             print("-"*120)
 
             max_rows = max(len(original_items), len(shortened_items))
@@ -410,7 +414,10 @@ class SIREN:
                           for score in data['metrics']['between_dim_scores']]
             overall_within = np.mean(all_within) if all_within else 0
             overall_between = np.mean(all_between) if all_between else 0
-            overall_ratio = overall_within / overall_between if overall_between > 0 else float('inf')
+            if overall_between > 0:
+                overall_ratio = overall_within / overall_between
+            else:
+                overall_ratio = float('inf')
 
             print(f"\nOverall: Within-similarity={overall_within:.3f}, "
                   f"Between-similarity={overall_between:.3f}, Ratio={overall_ratio:.2f}")

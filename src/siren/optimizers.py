@@ -82,7 +82,8 @@ class AntColonyOptimizer(OptimizationMethod):
         iteration_scores = []
 
         if not suppress_output:
-            print(f"\nStarting Ant Colony Optimization with {n_ants} ants and {n_iterations} iterations")
+            print(f"\nStarting Ant Colony Optimization "
+                  f"with {n_ants} ants and {n_iterations} iterations")
             print(f"Target items per dimension: {items_per_dim}")
             print(f"Parameters: alpha={alpha}, beta={beta}, rho={rho}, q0={q0}")
 
@@ -128,7 +129,10 @@ class AntColonyOptimizer(OptimizationMethod):
 
                 # Show constraint satisfaction
                 for dim, indices in dim_indices.items():
-                    target_count = items_per_dim[dim] if isinstance(items_per_dim, dict) else items_per_dim
+                    if isinstance(items_per_dim, dict):
+                        target_count = items_per_dim[dim]
+                    else:
+                        target_count = items_per_dim
                     selected_count = len(np.intersect1d(selected_indices, indices))
                     status = "✓" if selected_count == target_count else "✗"
                     print(f"  Dimension {dim}: {selected_count}/{target_count} items {status}")
@@ -138,7 +142,8 @@ class AntColonyOptimizer(OptimizationMethod):
                 recent_scores = iteration_scores[-20:]
                 if len(set(recent_scores)) == 1:  # No improvement in 20 iterations
                     if not suppress_output:
-                        print(f"Early stopping at iteration {iteration+1} - no improvement detected")
+                        print(f"Early stopping at iteration {iteration+1} "
+                              "- no improvement detected")
                     break
 
         if not suppress_output:
@@ -174,7 +179,8 @@ class AntColonyOptimizer(OptimizationMethod):
                     between_sim = 0
 
                 # Heuristic value: high within-dim similarity, low between-dim similarity
-                eta[i] = within_sim / (between_sim + 0.01)  # Add small constant to avoid division by zero
+                # Add small constant to avoid division by zero
+                eta[i] = within_sim / (between_sim + 0.01)
 
         # Normalize
         eta = eta / np.max(eta) if np.max(eta) > 0 else eta
@@ -322,7 +328,10 @@ class GeneticAlgorithmOptimizer(OptimizationMethod):
             penalty = 0
             similarity_matrix, dim_indices, items_per_dim = args
             for dim, indices in dim_indices.items():
-                target_count = items_per_dim[dim] if isinstance(items_per_dim, dict) else items_per_dim
+                if isinstance(items_per_dim, dict):
+                    target_count = items_per_dim[dim]
+                else:
+                    target_count = items_per_dim
                 selected_indices = np.where(x_binary > 0.5)[0]
                 selected_count = len(np.intersect1d(selected_indices, indices))
                 if selected_count != target_count:
@@ -370,7 +379,10 @@ class SimulatedAnnealingOptimizer(OptimizationMethod):
             penalty = 0
             similarity_matrix, dim_indices, items_per_dim = args
             for dim, indices in dim_indices.items():
-                target_count = items_per_dim[dim] if isinstance(items_per_dim, dict) else items_per_dim
+                if isinstance(items_per_dim, dict):
+                    target_count = items_per_dim[dim]
+                else:
+                    target_count = items_per_dim
                 x_binary = np.round(x).astype(int)
                 selected_indices = np.where(x_binary > 0.5)[0]
                 selected_count = len(np.intersect1d(selected_indices, indices))
