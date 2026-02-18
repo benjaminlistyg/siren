@@ -1,0 +1,3 @@
+"""
+Tests for SIREN package.
+"""
