@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "siren-scale"
-version = "0.1.0"
+version = "0.2.0"
 description = "SIREN - Semantic Item Reduction Engine for automated psychometric scale reduction"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "SIREN Contributors"}
+    {name = "Benjamin Listyg", email = "listyg.ben@gmail.com"}
 ]
 keywords = [
     "psychometrics",
@@ -18,7 +18,7 @@ keywords = [
     "semantic similarity",
     "optimization",
     "ant colony optimization",
-    "item response theory"
+    "scale shortening"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

@@ -106,3 +106,45 @@ def test_reduce_scale_invalid_count():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_objective_modes():
+    """Coverage and coherence objectives rank selections correctly
+    without requiring a model load."""
+    siren = object.__new__(SIREN)  # skip SentenceTransformer init
+    dim_indices = {"A": [0, 1, 2, 3], "B": [4, 5, 6, 7]}
+    S = np.eye(8)
+    for i in range(4):
+        for j in range(4):
+            if i != j:
+                S[i, j] = 0.8
+    S[3, :3] = S[:3, 3] = 0.1  # item 3 is a semantic oddball in A
+    for i in range(4, 8):
+        for j in range(4, 8):
+            if i != j:
+                S[i, j] = 0.7
+
+    # Coherence: a mutually similar pair beats a pair containing the oddball
+    siren._objective_mode = "coherence"
+    x_good = np.zeros(8); x_good[[0, 1, 4, 5]] = 1
+    x_bad = np.zeros(8); x_bad[[2, 3, 4, 5]] = 1
+    assert (siren.objective_function(x_good, S, dim_indices, 2)
+            < siren.objective_function(x_bad, S, dim_indices, 2))
+
+    # Coverage at k=1: the semantically central item beats the oddball
+    siren._objective_mode = "coverage"
+    x_central = np.zeros(8); x_central[[0, 4]] = 1
+    x_odd = np.zeros(8); x_odd[[3, 4]] = 1
+    assert (siren.objective_function(x_central, S, dim_indices, 1)
+            < siren.objective_function(x_odd, S, dim_indices, 1))
+
+    # Constraint penalty applies in both modes
+    x_bad_count = np.zeros(8); x_bad_count[[0, 1, 2, 4]] = 1
+    assert siren.objective_function(x_bad_count, S, dim_indices, 2) > 500
+
+
+def test_reduce_scale_rejects_unknown_objective():
+    siren = object.__new__(SIREN)
+    with pytest.raises(ValueError):
+        siren.reduce_scale(["a", "b"], ["A", "A"], items_per_dim=1,
+                           objective="nonsense")

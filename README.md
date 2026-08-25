@@ -203,17 +203,18 @@ SIREN's default optimizer uses ACO, which has been shown to be particularly effe
 - **Constraint satisfaction**: Naturally handles complex constraints about item selection
 - **Parallel solution construction**: Multiple "ants" explore solution space simultaneously
 
-### Objective Function
+### Objective Functions
 
-SIREN optimizes for:
-1. **High within-dimension similarity**: Items in the same dimension should be semantically similar
-2. **Low between-dimension similarity**: Items from different dimensions should be distinct
-3. **Constraint satisfaction**: Exact number of items selected per dimension
+SIREN supports two objectives (`objective=` parameter of `reduce_scale()`), both of which also minimize between-dimension similarity and enforce exact item counts per dimension:
+
+1. **`'coherence'`** (default): maximizes the mean pairwise semantic similarity among the *selected* items within each dimension. Selected items are mutually similar in meaning. Note: degenerate when `items_per_dim=1` (no within-dimension pairs exist) — use `'coverage'` there.
+2. **`'coverage'`**: facility-location criterion — maximizes, for each *dropped* item, its maximum similarity to a retained item of the same dimension. Selected items are semantically *representative* of the full dimension pool, preserving content breadth instead of rewarding redundancy. Well-defined for any `items_per_dim >= 1`.
 
 The objective function is:
 ```
-Score = Σ(2.0 × within_similarity - between_similarity) - penalties
+Score = Σ(2.0 × within_score - between_similarity) - penalties
 ```
+where `within_score` is mean pairwise similarity (coherence) or mean max-similarity coverage of dropped items (coverage).
 
 ## API Reference
 
@@ -236,7 +237,9 @@ reduce_scale(
     dimension_labels: List[str],
     items_per_dim: Union[int, Dict[str, int]] = 2,
     suppress_details: bool = False,
-    n_tries: int = 5
+    n_tries: int = 5,
+    reverse_scored: Optional[List[int]] = None,
+    objective: str = 'coherence'
 ) -> Tuple[Dict[str, Dict], pd.DataFrame]
 ```
 
@@ -248,6 +251,8 @@ Reduce a psychometric scale to fewer items.
 - `items_per_dim`: Target number of items per dimension (int or dict)
 - `suppress_details`: If True, suppress optimization output
 - `n_tries`: Number of random initializations to try
+- `reverse_scored`: 0-indexed positions of reverse-scored items; their similarity-matrix rows/columns are sign-flipped before optimization
+- `objective`: `'coherence'` (default) or `'coverage'`; see Objective Functions above
 
 **Returns:**
 - Tuple of (results dictionary, similarity matrix DataFrame)

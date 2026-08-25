@@ -180,3 +180,15 @@ Thumbs.db
 # Torch / model cache
 *.pt
 *.bin
+
+# Research / manuscript materials (kept out of the package repo)
+data/
+code/
+plots/
+manuscript*
+references.bib
+*.RData
+*.pdf
+*.txt
+sim_matrix_*.csv
+siren_*results*.json

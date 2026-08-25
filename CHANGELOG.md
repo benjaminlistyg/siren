@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-08-25
+
+### Added
+- `objective` parameter for `reduce_scale()`: `'coherence'` (default, original
+  behavior) or `'coverage'` (facility-location content coverage). Coverage
+  selects items semantically representative of each dimension's full pool and
+  is well-defined for one item per dimension, where coherence is degenerate.
+- `reverse_scored` parameter for `reduce_scale()` and `print_comparison()`:
+  sign-flips reverse-keyed items in the similarity matrix before optimization.
+- Model-free unit tests for both objective modes.
+
 ## [0.1.0] - 2024-10-29
 
 ### Added

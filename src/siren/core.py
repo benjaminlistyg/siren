@@ -44,6 +44,8 @@ class SIREN:
         self.model = SentenceTransformer(model_name)
         # Default to ACO as it shows superior performance for scale reduction
         self.optimizer = optimizer or AntColonyOptimizer()
+        # Objective mode used by objective_function; set per-call in reduce_scale
+        self._objective_mode = 'coherence'
 
     def set_optimizer(self, optimizer: OptimizationMethod):
         """
@@ -129,8 +131,21 @@ class SIREN:
         """
         Objective function for optimization.
 
-        Maximizes within-dimension similarity and minimizes between-dimension
-        similarity while satisfying item count constraints.
+        Two objective modes are supported (set via reduce_scale's `objective`
+        argument):
+
+        - 'coherence' (default): maximizes the mean pairwise similarity among
+          selected items within each dimension. Undefined (contributes 0) when
+          only one item is selected per dimension.
+        - 'coverage': facility-location style content coverage. For each
+          dimension, maximizes the mean over *non-selected* pool items of
+          their maximum similarity to any selected item in that dimension.
+          This rewards item subsets that are semantically representative of
+          the full dimension pool (rather than mutually redundant) and is
+          well-defined for one item per dimension.
+
+        Both modes subtract mean between-dimension similarity among selected
+        items and apply penalties for item count constraint violations.
 
         Args:
             x: Binary solution vector (1 = item selected, 0 = not selected)
@@ -155,12 +170,24 @@ class SIREN:
             if len(dim_selected) == 0:
                 return np.inf
 
-            # Within-dimension similarity (maximize)
-            within_sims = []
-            for i, j in itertools.combinations(dim_selected, 2):
-                sim = similarity_matrix[i, j]
-                within_sims.append(abs(sim))
-            within_score = np.mean(within_sims) if within_sims else 0
+            if self._objective_mode == 'coverage':
+                # Within-dimension coverage (maximize): how well do the
+                # selected items semantically cover the dropped pool items?
+                pool_rest = np.setdiff1d(np.array(indices), dim_selected)
+                if len(pool_rest) == 0:
+                    within_score = 1.0
+                else:
+                    within_score = np.mean([
+                        np.max([abs(similarity_matrix[p, s]) for s in dim_selected])
+                        for p in pool_rest
+                    ])
+            else:
+                # Within-dimension similarity (maximize)
+                within_sims = []
+                for i, j in itertools.combinations(dim_selected, 2):
+                    sim = similarity_matrix[i, j]
+                    within_sims.append(abs(sim))
+                within_score = np.mean(within_sims) if within_sims else 0
 
             # Between-dimension similarity (minimize)
             between_sims = []
@@ -187,7 +214,9 @@ class SIREN:
     def reduce_scale(self, items: List[str], dimension_labels: List[str],
                     items_per_dim: Union[int, Dict[str, int]] = 2,
                     suppress_details: bool = False,
-                    n_tries: int = 5) -> Tuple[Dict[str, Dict], pd.DataFrame]:
+                    n_tries: int = 5,
+                    reverse_scored: Optional[List[int]] = None,
+                    objective: str = 'coherence') -> Tuple[Dict[str, Dict], pd.DataFrame]:
         """
         Reduce scale using constrained optimization.
 
@@ -198,6 +227,13 @@ class SIREN:
                           mapping dimension names to target counts
             suppress_details: If True, suppress detailed optimization output
             n_tries: Number of random initializations to try
+            reverse_scored: Optional list of 0-indexed item positions that are
+                reverse-scored. Their rows and columns in the similarity matrix
+                will be sign-flipped so the optimizer treats them correctly.
+            objective: Objective mode, 'coherence' (default) or 'coverage'.
+                See objective_function for definitions. 'coverage' is
+                recommended when selecting one item per dimension, where the
+                coherence objective is degenerate (no within-dimension pairs).
 
         Returns:
             Tuple of (results dictionary, similarity matrix DataFrame)
@@ -207,6 +243,11 @@ class SIREN:
                     - 'metrics': Dict with 'within_dim_scores' and 'between_dim_scores'
                 - similarity_matrix: DataFrame with pairwise item similarities
         """
+        if objective not in ('coherence', 'coverage'):
+            raise ValueError(f"Unknown objective: {objective!r}; "
+                             "use 'coherence' or 'coverage'")
+        self._objective_mode = objective
+
         if not suppress_details:
             logger.info("Computing embeddings...")
 
@@ -220,6 +261,15 @@ class SIREN:
 
         similarity_matrix = cosine_similarity(embeddings)
         similarity_matrix = np.clip(similarity_matrix, -1, 1)
+
+        # Flip sign for reverse-scored items so the optimizer sees them as
+        # semantically aligned with their dimension rather than opposite.
+        # Each index is flipped in both its row and column; the diagonal
+        # element is flipped twice and therefore stays at 1.0.
+        if reverse_scored:
+            for idx in reverse_scored:
+                similarity_matrix[idx, :] *= -1
+                similarity_matrix[:, idx] *= -1
 
         # Get dimension indices
         dim_indices = self.get_dimension_indices(dimension_labels)
@@ -325,7 +375,8 @@ class SIREN:
 
     def print_comparison(self, items: List[str], dimension_labels: List[str],
                         result: Dict[str, Dict], items_per_dim: Union[int, Dict[str, int]],
-                        show_summary: bool = False):
+                        show_summary: bool = False,
+                        reverse_scored: Optional[List[int]] = None):
         """
         Print original and shortened scales side by side.
 
@@ -335,6 +386,8 @@ class SIREN:
             result: Results dictionary from reduce_scale()
             items_per_dim: Target items per dimension used
             show_summary: If True, show summary statistics
+            reverse_scored: Optional list of 0-indexed item positions that are
+                reverse-scored. Items in this list are tagged with (R).
         """
         # Get dimension indices
         dim_indices = self.get_dimension_indices(dimension_labels)
@@ -383,12 +436,11 @@ class SIREN:
                     if len(short_item) > 57:
                         short_item = short_item[:54] + "..."
                     short_text = f"{i+1:2}. {short_item}"
-                    # Add (R) for reverse-scored items
-                    reverse_keywords = ["doubt", "rarely", "lack", "struggle", "overwhelm",
-                                      "anxious", "panic", "freeze", "hesitate", "isolated",
-                                      "disconnected", "distracted"]
-                    if any(word in short_item.lower() for word in reverse_keywords):
-                        short_text += " (R)"
+                    # Tag reverse-scored items
+                    if reverse_scored and i < len(result[dim]['indices']):
+                        original_index = result[dim]['indices'][i]
+                        if original_index in reverse_scored:
+                            short_text += " (R)"
                 else:
                     short_text = ""
 
