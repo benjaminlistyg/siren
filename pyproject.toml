@@ -4,12 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "siren-scale"
-version = "0.3.0"
+version = "0.3.1"
 description = "SIREN - Semantic Item Reduction Engine for automated psychometric scale reduction"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
+    {name = "Benjamin Listyg"},
+    {name = "Brennah V. Ross"}
+]
+maintainers = [
     {name = "Benjamin Listyg", email = "listyg.ben@gmail.com"}
 ]
 keywords = [

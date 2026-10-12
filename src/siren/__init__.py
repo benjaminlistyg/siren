@@ -29,8 +29,8 @@ from .diagnostics import (
 )
 from .plots import plot_item_map, plot_similarity_heatmap
 
-__version__ = "0.3.0"
-__author__ = "SIREN Contributors"
+__version__ = "0.3.1"
+__author__ = "Benjamin Listyg, Brennah V. Ross"
 __all__ = [
     "SIREN",
     "OptimizationMethod",
