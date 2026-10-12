@@ -51,7 +51,8 @@ class AntColonyOptimizer(OptimizationMethod):
             args: (similarity_matrix, dim_indices, items_per_dim)
             constraints: Constraints (not used in ACO)
             bounds: Variable bounds
-            **kwargs: Options including n_ants, maxiter, alpha, beta, rho, q0, suppress_output
+            **kwargs: Options including n_ants, maxiter, alpha, beta, rho, q0, suppress_output,
+                seed (consumed by reduce_scale via numpy's global RNG)
 
         Returns:
             OptimizeResult with optimized solution
@@ -353,7 +354,8 @@ class GeneticAlgorithmOptimizer(OptimizationMethod):
             atol=convergence_threshold,
             polish=False,
             workers=1,
-            disp=False
+            disp=False,
+            seed=options.get('seed')
         )
 
         if not suppress_output:
@@ -401,7 +403,8 @@ class SimulatedAnnealingOptimizer(OptimizationMethod):
             x0=x0,
             args=args,
             maxiter=maxiter,
-            no_local_search=True
+            no_local_search=True,
+            seed=options.get('seed')
         )
 
         if not suppress_output:

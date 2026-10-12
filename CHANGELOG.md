@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-10-12
+
+### Added
+- Precomputed inputs: `reduce_scale()` accepts `embeddings=` or
+  `similarity_matrix=` and skips the encoder. `SIREN(model_name=None)` never
+  loads a model; the model is otherwise loaded lazily on first use.
+  `SIREN(model=...)` accepts an already-loaded encoder.
+- Reproducibility: `seed=` on `SIREN()` and `reduce_scale()` seeds the
+  restarts, ACO, and the scipy-based optimizers.
+- Optimizer tuning: `optimizer_options=` on `SIREN()` and `reduce_scale()`
+  forwards e.g. `{'n_ants': 40, 'maxiter': 200}` to the optimizer.
+- Structure discovery: `SIREN.infer_dimensions()` clusters item embeddings
+  (k-means; k by silhouette unless given). `reduce_scale(dimension_labels=None)`
+  infers labels automatically.
+- Alternative selectors: `reduce_scale(method='centroid' | 'greedy')` and
+  `siren.selection.select_centroid` / `select_greedy_coverage` /
+  `select_random_stratified` for deterministic baselines.
+- Diagnostics (`siren.diagnostics`): `coverage_report` (dropped-item proxy
+  audit and content gaps), `coverage_percentile` (null distribution of random
+  dimension-stratified subsets), `redundancy` (near-duplicate pairs and
+  clusters), `fidelity_report` (one-table summary), plus `coverage_score`,
+  `coherence_score`, `between_score`. Convenience wrappers
+  `SIREN.fidelity_report()` and `SIREN.coverage_report()`.
+- Item vetting: `SIREN.item_fit()` scores candidate items against dimension
+  centroids and nearest existing items.
+- Plots (`siren.plots`, optional `matplotlib`; `pip install siren-scale[plots]`):
+  `plot_item_map` (PCA/MDS) and `plot_similarity_heatmap`.
+- `embed()`, `compute_similarity()`, `similarity_from_embeddings()` helpers.
+- Per-dimension `'coverage'` added to `result[dim]['metrics']`.
+
+### Changed
+- `within_dim_scores` is `nan` (not 0) for a dimension with a single retained item.
+- `print_comparison(show_summary=True)` also prints mean coverage.
+
 ## [0.2.0] - 2026-08-25
 
 ### Added

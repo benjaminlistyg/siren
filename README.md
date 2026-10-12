@@ -14,11 +14,14 @@ SIREN is an automated psychometric scale reduction tool that uses semantic simil
   - **Genetic Algorithm** - Differential Evolution approach
   - **Simulated Annealing** - Probabilistic optimization technique
 
-- **Semantic Analysis**: Uses state-of-the-art sentence transformers to compute semantic similarity between items
-- **Multi-dimensional Support**: Handle scales with multiple dimensions/factors
-- **Flexible Configuration**: Specify different target item counts per dimension
-- **Comprehensive Metrics**: Detailed within-dimension and between-dimension similarity scores
-- **Easy-to-use API**: Simple, intuitive interface for scale reduction
+- **Semantic Analysis**: Uses sentence transformers (any `sentence-transformers` model by name) to compute semantic similarity between items; or bring your own embeddings / similarity matrix
+- **Two Objectives**: semantic *coverage* (content-representative items) or *coherence* (mutually similar items), both with a between-dimension penalty
+- **Multi-dimensional Support**: Handle scales with multiple dimensions/factors, with exact per-dimension item quotas; reverse-keyed items handled inside the objective
+- **Structure Discovery**: No dimension key? `infer_dimensions()` clusters items from text
+- **Deterministic Baselines**: nearest-centroid and greedy facility-location selectors (`method='centroid' | 'greedy'`) for comparison with the optimizer
+- **Diagnostics**: dropped-item coverage audit and content gaps, percentile of any short form against random dimension-stratified subsets, near-duplicate (redundancy) detection, one-table fidelity report, candidate-item vetting
+- **Plots**: 2-D item maps (PCA/MDS) and similarity heatmaps (`pip install siren-scale[plots]`)
+- **Reproducible**: `seed=` controls restarts and every optimizer; `optimizer_options=` exposes ACO/GA/SA/SLSQP settings
 
 ## Project Structure
 
@@ -26,15 +29,20 @@ SIREN is an automated psychometric scale reduction tool that uses semantic simil
 siren/
 ├── src/siren/              # Main package source code
 │   ├── __init__.py        # Package initialization and exports
-│   ├── core.py            # SIREN class and main functionality
+│   ├── core.py            # SIREN class: embedding, selection, inference, vetting
 │   ├── optimizers.py      # Optimization algorithms (ACO, SLSQP, GA, SA)
+│   ├── selection.py       # Deterministic selectors (centroid, greedy coverage, random)
+│   ├── diagnostics.py     # Coverage audit, null percentiles, redundancy, fidelity report
+│   ├── plots.py           # Optional matplotlib plots
 │   └── py.typed           # PEP 561 type marker
 ├── examples/              # Example scripts and demonstrations
 │   ├── example_usage.py   # Comprehensive usage examples
+│   ├── diagnostics_example.py  # Diagnostics, selectors, structure discovery, plots
 │   └── verify_install.py  # Installation verification script
 ├── tests/                 # Test suite
 │   ├── __init__.py
-│   └── test_siren.py      # Unit tests
+│   ├── test_siren.py      # Core tests (load the default model)
+│   └── test_selection_diagnostics.py  # Model-free tests
 ├── .github/workflows/     # CI/CD
 │   ├── tests.yml          # Test workflow
 │   └── publish.yml        # PyPI publish workflow
@@ -51,7 +59,8 @@ siren/
 ### From PyPI (recommended)
 
 ```bash
-pip install siren-scale
+pip install siren-scale          # core
+pip install siren-scale[plots]   # + matplotlib for plot_item_map / plot_similarity_heatmap
 ```
 
 ### From source
@@ -192,6 +201,90 @@ result, _ = siren.reduce_scale(
 )
 ```
 
+### Precomputed Embeddings or Similarity Matrix
+
+`reduce_scale()` accepts `embeddings=` (n_items × dim) or `similarity_matrix=` (n_items × n_items) and skips the encoder. Any symmetric similarity works, e.g. predicted inter-item correlations from a fine-tuned model. With `SIREN(model_name=None)` no model is ever loaded.
+
+```python
+siren = SIREN(seed=0)
+E = siren.embed(items)                                   # encode once
+S = siren.similarity_from_embeddings(E, reverse_scored=[5, 6])
+
+result, _ = siren.reduce_scale(items, dimensions, items_per_dim=3,
+                               similarity_matrix=S, objective="coverage")
+
+# or, with a matrix from elsewhere and no model at all
+siren = SIREN(model_name=None)
+result, _ = siren.reduce_scale(items, dimensions, items_per_dim=3, similarity_matrix=my_matrix)
+```
+
+### Reproducibility and Optimizer Settings
+
+```python
+siren = SIREN(seed=42, optimizer_options={"n_ants": 40, "maxiter": 200})   # defaults for every call
+result, _ = siren.reduce_scale(items, dimensions, items_per_dim=3,
+                               seed=7,                                      # per-call override
+                               optimizer_options={"maxiter": 300})          # merged over instance defaults
+```
+
+ACO accepts `n_ants`, `maxiter`, `alpha`, `beta`, `rho`, `q0`; the genetic algorithm `maxiter`, `popsize`, `tol`; SLSQP and simulated annealing `maxiter`. The seed drives the restarts, ACO, and the scipy-based optimizers.
+
+### Deterministic Selectors
+
+Two single-pass selectors are available as baselines for the optimizer (and reproduce the selection rule of clustering-based tools):
+
+```python
+result, _ = siren.reduce_scale(items, dimensions, items_per_dim=3, method="centroid")  # most central items
+result, _ = siren.reduce_scale(items, dimensions, items_per_dim=3, method="greedy")    # greedy facility-location coverage
+
+from siren import select_centroid, select_greedy_coverage, select_random_stratified
+dim_idx = siren.get_dimension_indices(dimensions)
+chosen = select_greedy_coverage(S, dim_idx, items_per_dim=3)   # {dimension: [indices]}
+```
+
+### Structure Discovery
+
+```python
+labels = siren.infer_dimensions(items)                 # k by silhouette over 2..10
+labels = siren.infer_dimensions(items, n_dimensions=4)
+result, _ = siren.reduce_scale(items, None, items_per_dim=2)   # infers labels; see siren.last_dimension_labels_
+```
+
+Prefer the instrument's own dimension key when one exists; inference is for pools without one.
+
+### Diagnostics
+
+```python
+from siren import coverage_report, coverage_percentile, redundancy, fidelity_report
+
+# What did the short form give up? Each dropped item, its closest retained proxy, and content gaps
+audit = siren.coverage_report(items=items, gap_threshold=0.5)   # uses the last reduce_scale() call
+audit["dropped"]; audit["gaps"]; audit["summary"]
+
+# Where does the form fall among random dimension-stratified subsets of the same size?
+fid = siren.fidelity_report(n_random=1000)
+fid["table"]                      # per-dimension coherence, coverage, between + overall
+fid["percentiles"]["coverage"]    # {'observed', 'percentile', 'null_mean', 'null_sd', 'z', ...}
+
+# The same audit for *any* proposed short form (including data-driven ones)
+pct = coverage_percentile(S, dim_idx, {"A": [0, 2, 5], "B": [7, 9, 10]}, n_random=1000, seed=0)
+
+# Near-duplicate items in the pool
+red = redundancy(S, threshold=0.8, items=items, dimension_labels=dimensions)
+red["pairs"]; red["clusters"]; red["suggest_remove"]
+
+# Vet candidate items against the existing scale
+fit = siren.item_fit(["I can count on my colleagues."], items, dimensions)
+```
+
+### Plots
+
+```python
+from siren import plot_item_map, plot_similarity_heatmap   # requires matplotlib
+plot_item_map(embeddings=E, dimension_labels=dimensions, selected=result, items=items, annotate=True)
+plot_similarity_heatmap(S, dimension_labels=dimensions, selected=result, items=items)
+```
+
 ## Algorithm Details
 
 ### Ant Colony Optimization (ACO)
@@ -221,12 +314,17 @@ where `within_score` is mean pairwise similarity (coherence) or mean max-similar
 ### SIREN Class
 
 ```python
-SIREN(model_name='all-MiniLM-L12-v2', optimizer=None)
+SIREN(model_name='all-MiniLM-L12-v2', optimizer=None, seed=None, optimizer_options=None, model=None)
 ```
 
 **Parameters:**
-- `model_name` (str): Name of the sentence-transformer model to use
+- `model_name` (str | None): Name of the sentence-transformer model to use; loaded lazily on first use. `None` disables model loading (pass `embeddings=` or `similarity_matrix=` to `reduce_scale()`)
 - `optimizer` (OptimizationMethod): Optimization method instance (default: AntColonyOptimizer)
+- `seed` (int | None): Default random seed for `reduce_scale()`
+- `optimizer_options` (dict | None): Default options forwarded to the optimizer
+- `model`: An already-loaded encoder exposing `encode(texts)`; takes precedence over `model_name`
+
+**Attributes set by the last `reduce_scale()` call:** `last_similarity_`, `last_embeddings_`, `last_dimension_labels_`, `last_selection_`
 
 **Methods:**
 
@@ -234,12 +332,18 @@ SIREN(model_name='all-MiniLM-L12-v2', optimizer=None)
 ```python
 reduce_scale(
     items: List[str],
-    dimension_labels: List[str],
+    dimension_labels: Optional[List[str]] = None,
     items_per_dim: Union[int, Dict[str, int]] = 2,
     suppress_details: bool = False,
     n_tries: int = 5,
     reverse_scored: Optional[List[int]] = None,
-    objective: str = 'coherence'
+    objective: str = 'coherence',
+    embeddings: Optional[np.ndarray] = None,
+    similarity_matrix: Optional[np.ndarray] = None,
+    method: str = 'optimize',
+    seed: Optional[int] = None,
+    optimizer_options: Optional[Dict] = None,
+    n_dimensions: Optional[int] = None,
 ) -> Tuple[Dict[str, Dict], pd.DataFrame]
 ```
 
@@ -247,15 +351,33 @@ Reduce a psychometric scale to fewer items.
 
 **Parameters:**
 - `items`: List of item texts
-- `dimension_labels`: List of dimension labels (same length as items)
+- `dimension_labels`: List of dimension labels (same length as items); `None` infers them from text
 - `items_per_dim`: Target number of items per dimension (int or dict)
 - `suppress_details`: If True, suppress optimization output
-- `n_tries`: Number of random initializations to try
-- `reverse_scored`: 0-indexed positions of reverse-scored items; their similarity-matrix rows/columns are sign-flipped before optimization
+- `n_tries`: Number of random initializations to try (`method='optimize'`)
+- `reverse_scored`: 0-indexed positions of reverse-scored items; their similarity-matrix rows/columns are sign-flipped before selection
 - `objective`: `'coherence'` (default) or `'coverage'`; see Objective Functions above
+- `embeddings` / `similarity_matrix`: precomputed inputs; skip the encoder
+- `method`: `'optimize'` (default), `'centroid'`, or `'greedy'`
+- `seed`: random seed for this call
+- `optimizer_options`: options forwarded to the optimizer for this call
+- `n_dimensions`: number of dimensions to infer when `dimension_labels is None` (default: silhouette)
 
 **Returns:**
-- Tuple of (results dictionary, similarity matrix DataFrame)
+- Tuple of (results dictionary, similarity matrix DataFrame). `result[dim]['metrics']` holds `within_dim_scores`, `between_dim_scores`, and `coverage`.
+
+#### Other methods
+- `embed(items)`, `similarity_from_embeddings(E, reverse_scored=None)`, `compute_similarity(items=None, embeddings=None, reverse_scored=None)`
+- `infer_dimensions(items=None, embeddings=None, n_dimensions=None, max_dimensions=10, seed=None)`
+- `item_fit(candidates, items, dimension_labels, embeddings=None, candidate_embeddings=None, redundancy_threshold=0.8)`
+- `fidelity_report(result=None, similarity_matrix=None, dimension_labels=None, n_random=1000, seed=None)`
+- `coverage_report(result=None, similarity_matrix=None, dimension_labels=None, items=None, gap_threshold=0.5)`
+
+### Module functions
+
+- `siren.selection`: `select_centroid(S, dim_indices, items_per_dim)`, `select_greedy_coverage(...)`, `select_random_stratified(dim_indices, items_per_dim, rng=None)`
+- `siren.diagnostics`: `coverage_score`, `coherence_score`, `between_score`, `coverage_report`, `coverage_percentile(S, dim_indices, selected, statistic='coverage', n_random=1000, seed=None)`, `redundancy(S, threshold=0.8, items=None, dimension_labels=None, within_dimension_only=False)`, `fidelity_report`
+- `siren.plots`: `plot_item_map(embeddings=None, similarity_matrix=None, dimension_labels=None, selected=None, items=None, method='pca', annotate=False, seed=0, ax=None)`, `plot_similarity_heatmap(S, dimension_labels=None, selected=None, items=None, absolute=True, ax=None)`
 
 #### `print_comparison()`
 ```python
@@ -283,6 +405,7 @@ See the `examples/` directory for complete working examples:
 
 ```bash
 python examples/example_usage.py
+python examples/diagnostics_example.py
 ```
 
 ## Performance Considerations
@@ -306,9 +429,9 @@ Looking to contribute? Here's what's on our to-do list:
 - [ ] Jupyter notebook tutorials — walkthrough examples with real (or realistic) scale data showing end-to-end usage
 
 ### Testing
-- [ ] Expand test coverage — only 6 tests right now. Good targets: edge cases (single dimension, 1 item per dim, all identical items), each optimizer individually, `print_comparison` output, and metrics correctness
-- [ ] Mock the sentence-transformer model in tests so they run fast without downloading weights — right now every test hits the network
-- [ ] Add a test for reproducibility — same seed should give same results
+- [ ] Expand test coverage — 28 tests right now. Good targets: edge cases (single dimension, 1 item per dim, all identical items), each optimizer individually, `print_comparison` output, and metrics correctness
+- [x] Model-free tests via `SIREN(model_name=None)` + precomputed similarity matrices (`tests/test_selection_diagnostics.py`)
+- [x] Add a test for reproducibility — same seed should give same results
 
 ### Benchmarking & Validation
 - [ ] Build a benchmark suite — compare optimizers on known scales (speed, solution quality, convergence) and produce a table/chart for the docs
@@ -317,8 +440,8 @@ Looking to contribute? Here's what's on our to-do list:
 ### Features
 - [ ] CLI interface — `siren reduce --items items.csv --dims dims.csv --per-dim 3` using `click` or `argparse`
 - [ ] Results export — save results to CSV/JSON, not just print to console
-- [ ] Visualization — heatmap of the similarity matrix, before/after comparison plots using matplotlib
-- [ ] Cross-validation / stability analysis — run reduction multiple times with different seeds and report how stable the item selection is
+- [x] Visualization — `plot_similarity_heatmap`, `plot_item_map`
+- [ ] Cross-validation / stability analysis — run reduction multiple times with different seeds and report how stable the item selection is (seeds are now exposed; a helper that reports Jaccard stability is still to do)
 
 ### Code Quality
 - [ ] Add `py.typed` + full type annotations — get `mypy --strict` passing

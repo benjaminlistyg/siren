@@ -13,8 +13,23 @@ from .optimizers import (
     GeneticAlgorithmOptimizer,
     SimulatedAnnealingOptimizer,
 )
+from .selection import (
+    select_centroid,
+    select_greedy_coverage,
+    select_random_stratified,
+)
+from .diagnostics import (
+    coverage_score,
+    coherence_score,
+    between_score,
+    coverage_report,
+    coverage_percentile,
+    redundancy,
+    fidelity_report,
+)
+from .plots import plot_item_map, plot_similarity_heatmap
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __author__ = "SIREN Contributors"
 __all__ = [
     "SIREN",
@@ -23,4 +38,16 @@ __all__ = [
     "SLSQPOptimizer",
     "GeneticAlgorithmOptimizer",
     "SimulatedAnnealingOptimizer",
+    "select_centroid",
+    "select_greedy_coverage",
+    "select_random_stratified",
+    "coverage_score",
+    "coherence_score",
+    "between_score",
+    "coverage_report",
+    "coverage_percentile",
+    "redundancy",
+    "fidelity_report",
+    "plot_item_map",
+    "plot_similarity_heatmap",
 ]
